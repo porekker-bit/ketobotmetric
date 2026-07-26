@@ -126,7 +126,7 @@ try:
         else:
             st.info("Kolom Response_Time_MS tidak ditemukan.")
 
-    # 2. FE vs BE Time (BE di bawah/urutan pertama, FE di atasnya)
+    # 2. FE vs BE Time (BE di bawah, FE di atas) dengan pembersihan Query_Menu
     with b_col2:
         st.markdown("##### FE vs BE Time (by Query Menu)")
         if {'Query_Menu', 'User_Action', 'Response_Time_MS'}.issubset(df.columns):
@@ -150,7 +150,6 @@ try:
                 fe_be_grouped = filtered_fe_be.groupby(['Clean_Query_Menu', 'Type'])['Response_Time_MS'].mean().reset_index()
                 fe_be_grouped.rename(columns={'Response_Time_MS': 'Time_MS'}, inplace=True)
                 
-                # Urutan domain diatur agar BE_Time berada di urutan tumpukan bawah (order bawah ke atas)
                 chart_fe_be = alt.Chart(fe_be_grouped).mark_bar().encode(
                     x=alt.X('Time_MS:Q', title='Time (ms)'),
                     y=alt.Y('Clean_Query_Menu:N', sort='-x', title='Query Menu'),
@@ -164,24 +163,33 @@ try:
         else:
             st.info("Kolom pendukung FE/BE belum lengkap.")
 
-    # 3. Last Execution Card (Mengambil Max Timestamp dari log mini app atau total)
+    # 3. Last Execution Card (Khusus MinApp Render & Get List, ambil Max Timestamp)
     with b_col3:
         st.markdown("##### Last Execution")
-        # Filter baris mini app atau ambil max timestamp dari dataframe
-        if 'Timestamp' in df.columns:
-            max_time = df['Timestamp'].max()
-        else:
-            max_time = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
-            
-        latest = df.tail(1).iloc[0]
-        lat_resp = latest.get('Response_Time_MS', 0)
-        status_val = latest.get('OFF_Status', 'N/A')
         
+        # Filter khusus baris pasangannya minapp
+        minapp_df = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])]
+        
+        if not minapp_df.empty:
+            # Ambil baris dengan timestamp paling akhir (max)
+            latest_minapp = minapp_df.loc[minapp_df['Timestamp'].idxmax()]
+            
+            max_time = latest_minapp.get('Timestamp', '-')
+            query_menu_val = latest_minapp.get('Query_Menu', '-')
+            lat_resp = latest_minapp.get('Response_Time_MS', 0)
+            
+            # Bersihkan teks Query Menu biar jadi format angka menu
+            match_menu = re.search(r'(\d+)', str(query_menu_val))
+            display_menu = f"{match_menu.group(1)} Menu" if match_menu else str(query_menu_val)
+        else:
+            max_time = '-'
+            display_menu = '-'
+            lat_resp = 0
+
         st.markdown(f"""
             <div class="metric-box">
-                <b>Jumlah :</b> {total_interaction} Menu<br>
+                <b>Jumlah :</b> {display_menu}<br>
                 <b>Waktu :</b> {max_time}<br>
-                <b>Status :</b> {status_val if pd.notna(status_val) else 'N/A'}<br>
                 <b>Response Time :</b> {lat_resp} ms
             </div>
         """, unsafe_allow_html=True)

@@ -161,36 +161,44 @@ try:
             else:
                 st.info("Data MINAPP_RENDER_MENU / MINAPP_GET_LIST_MENU kosong.")
         else:
-            st.info("Kolom pendukung FE/BE belum lengkap.")
+            st.info("Kolom pendukung FE & BE belum lengkap.")
 
-    # 3. Last Execution Card (Khusus MinApp Render & Get List, ambil Max Timestamp)
+    # 3. Last Execution Card (Ambil nilai BE dan FE dari siklus terakhir)
     with b_col3:
         st.markdown("##### Last Execution")
         
-        # Filter khusus baris pasangannya minapp
         minapp_df = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])]
         
         if not minapp_df.empty:
-            # Ambil baris dengan timestamp paling akhir (max)
-            latest_minapp = minapp_df.loc[minapp_df['Timestamp'].idxmax()]
+            # Ambil timestamp maksimum secara global dari aksi minapp terakhir
+            max_time = minapp_df['Timestamp'].max()
             
-            max_time = latest_minapp.get('Timestamp', '-')
-            query_menu_val = latest_minapp.get('Query_Menu', '-')
-            lat_resp = latest_minapp.get('Response_Time_MS', 0)
+            # Ambil baris-baris yang memiliki timestamp maksimum tersebut (biasanya pasangan FE & BE di detik yang sama/berdekatan)
+            latest_pair = minapp_df[minapp_df['Timestamp'] == max_time]
             
-            # Bersihkan teks Query Menu biar jadi format angka menu
-            match_menu = re.search(r'(\d+)', str(query_menu_val))
-            display_menu = f"{match_menu.group(1)} Menu" if match_menu else str(query_menu_val)
+            # Ambil nilai Response Time untuk FE dan BE dari pair tersebut
+            fe_row = latest_pair[latest_pair['User_Action'].str.upper() == 'MINAPP_RENDER_MENU']
+            be_row = latest_pair[latest_pair['User_Action'].str.upper() == 'MINAPP_GET_LIST_MENU']
+            
+            fe_time = fe_row['Response_Time_MS'].values[0] if not fe_row.empty else 0
+            be_time = be_row['Response_Time_MS'].values[0] if not be_row.empty else 0
+            
+            # Ambil info jumlah menu dari baris tersebut
+            q_menu = latest_pair['Query_Menu'].values[0] if not latest_pair.empty else "-"
+            match_menu = re.search(r'(\d+)', str(q_menu))
+            display_menu = f"{match_menu.group(1)} Menu" if match_menu else str(q_menu)
         else:
-            max_time = '-'
-            display_menu = '-'
-            lat_resp = 0
+            max_time = "-"
+            display_menu = "-"
+            fe_time = 0
+            be_time = 0
 
         st.markdown(f"""
             <div class="metric-box">
                 <b>Jumlah :</b> {display_menu}<br>
                 <b>Waktu :</b> {max_time}<br>
-                <b>Response Time :</b> {lat_resp} ms
+                <b>FE (ms) :</b> {fe_time}<br>
+                <b>BE (ms) :</b> {be_time}
             </div>
         """, unsafe_allow_html=True)
 

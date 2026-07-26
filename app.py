@@ -26,7 +26,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Ganti link CSV Google Sheets kamu di sini
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBB1AmHsA4bJRFfBt19cYgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_data():

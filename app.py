@@ -29,8 +29,8 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# URL GIST yang benar (mengarah ke raw Gist langsung)
-GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/keto.json"
+# URL Raw Gist yang lengkap dengan hash commit valid kamu
+GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/67a5b3a32f6b86f059298dbb091f0621535a8bc3/keto.json"
 
 @st.cache_data(ttl=60)
 def load_sheet_url_from_gist():
@@ -41,8 +41,8 @@ def load_sheet_url_from_gist():
             return config.get("DS")
     except Exception:
         pass
-    # Fallback default URL jika GIST gagal diakses
-    return "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+    # Fallback default URL Google Sheets jika GIST gagal diakses
+    return "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_data(sheet_url):
@@ -66,15 +66,14 @@ try:
         # Konversi kolom Timestamp ke datetime untuk keperluan filter
         if 'Timestamp' in df_raw.columns:
             df_raw['Parsed_Date'] = pd.to_datetime(df_raw['Timestamp'], format='mixed', errors='coerce')
-            min_date = df_raw['Parsed_Date'].min().date() if not df_raw['Parsed_Date'].isna().all() else (datetime.date.today() - datetime.timedelta(days=30))
-            max_date = df_raw['Parsed_Date'].max().date() if not df_raw['Parsed_Date'].isna().all() else datetime.date.today()
-        else:
-            min_date = datetime.date.today() - datetime.timedelta(days=7)
-            max_date = datetime.date.today()
-
+        
+        # Default Last 7 Days (termasuk hari ini)
+        today_date = datetime.date.today()
+        default_start_date = today_date - datetime.timedelta(days=6)
+        
         date_range = st.date_input(
             "Filter Periode",
-            value=(min_date, max_date)
+            value=(default_start_date, today_date)
         )
 
     # Filter DataFrame berdasarkan tanggal yang dipilih di widget

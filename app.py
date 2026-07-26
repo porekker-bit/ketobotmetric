@@ -1,53 +1,42 @@
 import streamlit as st
 import pandas as pd
+import altair as alt
 import datetime
 
-# Konfigurasi Halaman (Lebar & Judul)
+# Konfigurasi Halaman
 st.set_page_config(
     page_title="KetoBot Dashboard",
     page_icon="📊",
     layout="wide"
 )
 
-# Styling CSS biar tampilannya clean ala dashboard profesional
+# Styling CSS biar tampilannya clean
 st.markdown("""
     <style>
         .main {
             background-color: #f4f6f9;
         }
-        .metric-card {
-            background-color: #ffffff;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            text-align: center;
-        }
     </style>
 """, unsafe_allow_html=True)
 
-# Ganti link CSV Google Sheets kamu di sini
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_data():
     df = pd.read_csv(SHEET_URL)
-    # Ubah kolom timestamp/tanggal ke format datetime jika ada (sesuaikan nama kolomnya)
-    # Contoh kolom mengasumsikan ada 'Timestamp' atau 'Date'
     return df
 
 try:
     df = load_data()
 
-    # --- HEADER & FILTER TANGGAL DI SIDEBAR / ATAS ---
+    # --- HEADER ---
     st.title("KetoBot Dashboard")
     st.markdown("---")
 
-    # Layout atas: Judul dan Filter Tanggal
     col_head1, col_head2 = st.columns([2, 1])
     with col_head1:
         st.subheader("Overview Log Analitik")
     with col_head2:
-        # Simulasi rentang tanggal (bisa disesuaikan jika kolom tanggal tersedia)
         date_range = st.date_input(
             "Filter Periode",
             value=(datetime.date.today() - datetime.timedelta(days=7), datetime.date.today())
@@ -63,31 +52,45 @@ try:
 
     st.markdown("---")
 
-    # --- LAYOUT UTAMA: GRAFIK & TABEL (3 KOLOM SEPERTI REFERENSI) ---
+    # --- LAYOUT UTAMA: GRAFIK & TABEL (3 KOLOM) ---
     col1, col2, col3 = st.columns(3)
 
-    # 1. Kolom Kiri: Distribusi Jenis Input User (Pie/Bar Chart)
+    # 1. Kolom Kiri: Distribusi Jenis Input User (Horizontal Bar Chart via Altair)
     with col1:
         st.markdown("### Distribusi Jenis Input User")
         if 'Input_Type' in df.columns:
-            input_counts = df['Input_Type'].value_counts()
-            st.bar_chart(input_counts)  # Streamlit native chart yang super cepat & interaktif
+            input_counts = df['Input_Type'].value_counts().reset_index()
+            input_counts.columns = ['Input_Type', 'Count']
+            
+            # Buat grafik horizontal pakai Altair
+            chart_input = alt.Chart(input_counts).mark_bar(color='#2b7de9').encode(
+                x=alt.X('Count:Q', title='Jumlah'),
+                y=alt.Y('Input_Type:N', sort='-x', title='Jenis Input')
+            ).properties(height=300)
+            
+            st.altair_chart(chart_input, use_container_width=True)
         else:
-            st.info("Kolom 'Input_Type' tidak ditemukan di Sheet.")
+            st.info("Kolom 'Input_Type' tidak ditemukan.")
 
-    # 2. Kolom Tengah: Top User Actions
+    # 2. Kolom Tengah: Top User Actions (Horizontal Bar Chart)
     with col2:
         st.markdown("### Top User Actions")
         if 'User_Action' in df.columns:
-            action_counts = df['User_Action'].value_counts().head(10)
-            st.bar_chart(action_counts, horizontal=True)
+            action_counts = df['User_Action'].value_counts().head(10).reset_index()
+            action_counts.columns = ['User_Action', 'Count']
+            
+            chart_action = alt.Chart(action_counts).mark_bar(color='#8c6239').encode(
+                x=alt.X('Count:Q', title='Jumlah'),
+                y=alt.Y('User_Action:N', sort='-x', title='User Action')
+            ).properties(height=300)
+            
+            st.altair_chart(chart_action, use_container_width=True)
         else:
-            st.info("Kolom 'User_Action' tidak ditemukan di Sheet.")
+            st.info("Kolom 'User_Action' tidak ditemukan.")
 
     # 3. Kolom Kanan: Top Unrecognized Queries (Tabel)
     with col3:
         st.markdown("### Top Unrecognized Queries")
-        # Contoh filter jika ada unhandled/unrecognized intent
         if 'User_Action' in df.columns:
             unrecognized = df[df['User_Action'].str.contains("UNRESOLVED|EMOJI|STICKER|UNRECOGNIZED", case=False, na=False)]
             if not unrecognized.empty:
@@ -95,7 +98,6 @@ try:
                 summary_unrec.columns = ['User_Action', 'Record Count']
                 st.dataframe(summary_unrec, use_container_width=True, hide_index=True)
             else:
-                # Fallback data dummy/tabel ringkas jika data spesifik belum ada
                 st.dataframe(df.tail(3)[['User_Action']], use_container_width=True, hide_index=True)
         else:
             st.dataframe(df.tail(3), use_container_width=True)

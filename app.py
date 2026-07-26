@@ -29,20 +29,26 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# URL Raw Gist yang lengkap dengan hash commit valid kamu
-GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/67a5b3a32f6b86f059298dbb091f0621535a8bc3/keto.json"
+# URL Gist utama (sama persis dengan yang dipakai di Mini Apps)
+GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/keto.json"
+# URL Fallback CSV Google Sheets langsung
+FALLBACK_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_sheet_url_from_gist():
     try:
-        response = requests.get(GIST_URL)
+        # Tambahkan headers agar request lolos dari proteksi raw GitHub Gist
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        response = requests.get(GIST_URL, headers=headers, timeout=5)
         if response.status_code == 200:
             config = response.json()
-            return config.get("DS")
+            ds_url = config.get("DS")
+            if ds_url:
+                return ds_url
     except Exception:
         pass
-    # Fallback default URL Google Sheets jika GIST gagal diakses
-    return "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+    # Jika gagal atau 404, langsung gunakan fallback CSV
+    return FALLBACK_SHEET_URL
 
 @st.cache_data(ttl=60)
 def load_data(sheet_url):
@@ -51,7 +57,7 @@ def load_data(sheet_url):
     return df
 
 try:
-    # Ambil URL Sheet dinamis dari GIST (key: "DS")
+    # Ambil URL Sheet dinamis dari GIST, jika gagal otomatis pakai fallback
     SHEET_URL = load_sheet_url_from_gist()
     df_raw = load_data(SHEET_URL)
 

@@ -126,7 +126,7 @@ try:
         else:
             st.info("Kolom Response_Time_MS tidak ditemukan.")
 
-    # 2. FE vs BE Time menggunakan Response_Time_MS
+    # 2. FE vs BE Time (BE di bawah/urutan pertama, FE di atasnya)
     with b_col2:
         st.markdown("##### FE vs BE Time (by Query Menu)")
         if {'Query_Menu', 'User_Action', 'Response_Time_MS'}.issubset(df.columns):
@@ -150,10 +150,13 @@ try:
                 fe_be_grouped = filtered_fe_be.groupby(['Clean_Query_Menu', 'Type'])['Response_Time_MS'].mean().reset_index()
                 fe_be_grouped.rename(columns={'Response_Time_MS': 'Time_MS'}, inplace=True)
                 
+                # Urutan domain diatur agar BE_Time berada di urutan tumpukan bawah (order bawah ke atas)
                 chart_fe_be = alt.Chart(fe_be_grouped).mark_bar().encode(
                     x=alt.X('Time_MS:Q', title='Time (ms)'),
                     y=alt.Y('Clean_Query_Menu:N', sort='-x', title='Query Menu'),
-                    color=alt.Color('Type:N', scale=alt.Scale(domain=['FE_Time', 'BE_Time'], range=['#3b82f6', '#22c55e']))
+                    color=alt.Color('Type:N', 
+                                    scale=alt.Scale(domain=['BE_Time', 'FE_Time'], range=['#22c55e', '#3b82f6']),
+                                    sort=['BE_Time', 'FE_Time'])
                 ).properties(height=300)
                 st.altair_chart(chart_fe_be, use_container_width=True)
             else:
@@ -161,18 +164,24 @@ try:
         else:
             st.info("Kolom pendukung FE/BE belum lengkap.")
 
-    # 3. Last Execution Card
+    # 3. Last Execution Card (Mengambil Max Timestamp dari log mini app atau total)
     with b_col3:
         st.markdown("##### Last Execution")
+        # Filter baris mini app atau ambil max timestamp dari dataframe
+        if 'Timestamp' in df.columns:
+            max_time = df['Timestamp'].max()
+        else:
+            max_time = datetime.datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+            
         latest = df.tail(1).iloc[0]
         lat_resp = latest.get('Response_Time_MS', 0)
-        lat_ai = latest.get('AI_Latency_MS', 0)
+        status_val = latest.get('OFF_Status', 'N/A')
         
         st.markdown(f"""
             <div class="metric-box">
                 <b>Jumlah :</b> {total_interaction} Menu<br>
-                <b>Waktu :</b> {datetime.datetime.now().strftime('%d %b %Y, %H:%M')}<br>
-                <b>Status :</b> {latest.get('OFF_Status', 'N/A')}<br>
+                <b>Waktu :</b> {max_time}<br>
+                <b>Status :</b> {status_val if pd.notna(status_val) else 'N/A'}<br>
                 <b>Response Time :</b> {lat_resp} ms
             </div>
         """, unsafe_allow_html=True)

@@ -32,7 +32,7 @@ st.markdown("""
 # URL Gist utama (sama persis dengan yang dipakai di Mini Apps)
 GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/keto.json"
 # URL Fallback CSV Google Sheets langsung
-FALLBACK_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+FALLBACK_SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_sheet_url_from_gist():

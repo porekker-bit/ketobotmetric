@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import datetime
+import re
 
 # Konfigurasi Halaman
 st.set_page_config(
@@ -31,6 +32,7 @@ SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-h
 @st.cache_data(ttl=60)
 def load_data():
     df = pd.read_csv(SHEET_URL)
+    df.columns = df.columns.str.strip()
     return df
 
 try:
@@ -122,36 +124,42 @@ try:
             ).properties(height=300)
             st.altair_chart(chart_resp, use_container_width=True)
         else:
-            st.info("Kolom waktu respons tidak lengkap.")
+            st.info("Kolom Response_Time_MS tidak ditemukan.")
 
-    # 2. FE Time (MINAPP_RENDER_MENU) vs BE Time (MINAPP_GET_LIST_MENU) by Query_Menu
+    # 2. FE vs BE Time menggunakan Response_Time_MS
     with b_col2:
         st.markdown("##### FE vs BE Time (by Query Menu)")
-        if {'Query_Menu', 'User_Action', 'AI_Latency_MS'}.issubset(df.columns):
-            # Filter baris yang sesuai dengan User_Action yang diminta
-            filtered_fe_be = df[df['User_Action'].isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])].copy()
+        if {'Query_Menu', 'User_Action', 'Response_Time_MS'}.issubset(df.columns):
+            filtered_fe_be = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])].copy()
             
             if not filtered_fe_be.empty:
-                # Petakan label type
-                filtered_fe_be['Type'] = filtered_fe_be['User_Action'].map({
+                def clean_query_menu(val):
+                    val_str = str(val)
+                    match = re.search(r'(\d+)', val_str)
+                    if match:
+                        return f"{match.group(1)} menu"
+                    return val_str
+
+                filtered_fe_be['Clean_Query_Menu'] = filtered_fe_be['Query_Menu'].apply(clean_query_menu)
+                
+                filtered_fe_be['Type'] = filtered_fe_be['User_Action'].str.upper().map({
                     'MINAPP_RENDER_MENU': 'FE_Time',
                     'MINAPP_GET_LIST_MENU': 'BE_Time'
                 })
                 
-                # Ambil kolom yang dibutuhkan dan group berdasarkan Query_Menu & Type
-                fe_be_grouped = filtered_fe_be.groupby(['Query_Menu', 'Type'])['AI_Latency_MS'].mean().reset_index()
-                fe_be_grouped.rename(columns={'AI_Latency_MS': 'Time_MS'}, inplace=True)
+                fe_be_grouped = filtered_fe_be.groupby(['Clean_Query_Menu', 'Type'])['Response_Time_MS'].mean().reset_index()
+                fe_be_grouped.rename(columns={'Response_Time_MS': 'Time_MS'}, inplace=True)
                 
                 chart_fe_be = alt.Chart(fe_be_grouped).mark_bar().encode(
                     x=alt.X('Time_MS:Q', title='Time (ms)'),
-                    y=alt.Y('Query_Menu:N', sort='-x', title='Query Menu'),
+                    y=alt.Y('Clean_Query_Menu:N', sort='-x', title='Query Menu'),
                     color=alt.Color('Type:N', scale=alt.Scale(domain=['FE_Time', 'BE_Time'], range=['#3b82f6', '#22c55e']))
                 ).properties(height=300)
                 st.altair_chart(chart_fe_be, use_container_width=True)
             else:
-                st.info("Belum ada data untuk MINAPP_RENDER_MENU / MINAPP_GET_LIST_MENU.")
+                st.info("Data MINAPP_RENDER_MENU / MINAPP_GET_LIST_MENU kosong.")
         else:
-            st.info("Kolom pendukung FE/BE belum lengkap di Sheet.")
+            st.info("Kolom pendukung FE/BE belum lengkap.")
 
     # 3. Last Execution Card
     with b_col3:
@@ -164,8 +172,8 @@ try:
             <div class="metric-box">
                 <b>Jumlah :</b> {total_interaction} Menu<br>
                 <b>Waktu :</b> {datetime.datetime.now().strftime('%d %b %Y, %H:%M')}<br>
-                <b>FE (ms) :</b> {lat_resp}<br>
-                <b>BE (ms) :</b> {lat_ai}
+                <b>Status :</b> {latest.get('OFF_Status', 'N/A')}<br>
+                <b>Response Time :</b> {lat_resp} ms
             </div>
         """, unsafe_allow_html=True)
 

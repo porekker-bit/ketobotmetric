@@ -30,7 +30,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # URL GIST yang benar (mengarah ke raw Gist langsung)
-GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw"
+GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/keto.json"
 
 @st.cache_data(ttl=60)
 def load_sheet_url_from_gist():

@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 import altair as alt
 import datetime
+import requests
+import json
 import re
 
 # Konfigurasi Halaman
@@ -27,18 +29,33 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+# URL GIST untuk mengambil konfigurasi JSON
+GIST_URL = "https://gist.githubusercontent.com/porekker-bit/af3570b588cf74d97e230b8c51c0a255/raw/keto.json"
 
 @st.cache_data(ttl=60)
-def load_data():
-    df = pd.read_csv(SHEET_URL)
+def load_sheet_url_from_gist():
+    try:
+        response = requests.get(GIST_URL)
+        if response.status_code == 200:
+            config = response.json()
+            return config.get("DS")
+    except Exception:
+        pass
+    # Fallback default URL jika GIST gagal diakses
+    return "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+
+@st.cache_data(ttl=60)
+def load_data(sheet_url):
+    df = pd.read_csv(sheet_url)
     df.columns = df.columns.str.strip()
     return df
 
 try:
-    df = load_data()
+    # Ambil URL Sheet dinamis dari GIST (key: "DS")
+    SHEET_URL = load_sheet_url_from_gist()
+    df_raw = load_data(SHEET_URL)
 
-    # --- HEADER ---
+    # --- HEADER & FILTER PERIODE ---
     st.title("KetoBot Dashboard")
     st.markdown("---")
 
@@ -46,12 +63,27 @@ try:
     with col_head1:
         st.subheader("Overview Log Analitik")
     with col_head2:
+        # Konversi kolom Timestamp ke datetime untuk keperluan filter
+        if 'Timestamp' in df_raw.columns:
+            df_raw['Parsed_Date'] = pd.to_datetime(df_raw['Timestamp'], format='mixed', errors='coerce')
+            min_date = df_raw['Parsed_Date'].min().date() if not df_raw['Parsed_Date'].isna().all() else (datetime.date.today() - datetime.timedelta(days=30))
+            max_date = df_raw['Parsed_Date'].max().date() if not df_raw['Parsed_Date'].isna().all() else datetime.date.today()
+        else:
+            min_date = datetime.date.today() - datetime.timedelta(days=7)
+            max_date = datetime.date.today()
+
         date_range = st.date_input(
             "Filter Periode",
-            value=(datetime.date.today() - datetime.timedelta(days=7), datetime.date.today())
+            value=(min_date, max_date)
         )
 
-    # --- BARIS ATAS: KARTU METRIK TOTAL ---
+    # Filter DataFrame berdasarkan tanggal yang dipilih di widget
+    df = df_raw.copy()
+    if 'Parsed_Date' in df.columns and len(date_range) == 2:
+        start_date, end_date = date_range
+        df = df[(df['Parsed_Date'].dt.date >= start_date) & (df['Parsed_Date'].dt.date <= end_date)]
+
+    # --- BARIS ATAS: KARTU METRIK TOTAL (Terfilter) ---
     total_interaction = len(df)
     st.markdown("<br>", unsafe_allow_html=True)
     m1, m2, m3 = st.columns([1, 2, 2])
@@ -66,7 +98,7 @@ try:
     # 1. Distribusi Jenis Input User
     with col1:
         st.markdown("### Distribusi Jenis Input User")
-        if 'Input_Type' in df.columns:
+        if 'Input_Type' in df.columns and not df.empty:
             input_counts = df['Input_Type'].value_counts().reset_index()
             input_counts.columns = ['Input_Type', 'Count']
             chart_input = alt.Chart(input_counts).mark_bar(color='#2b7de9').encode(
@@ -75,12 +107,12 @@ try:
             ).properties(height=280)
             st.altair_chart(chart_input, use_container_width=True)
         else:
-            st.info("Kolom 'Input_Type' tidak ditemukan.")
+            st.info("Tidak ada data pada periode ini.")
 
     # 2. Top User Actions
     with col2:
         st.markdown("### Top User Actions")
-        if 'User_Action' in df.columns:
+        if 'User_Action' in df.columns and not df.empty:
             action_counts = df['User_Action'].value_counts().head(10).reset_index()
             action_counts.columns = ['User_Action', 'Count']
             chart_action = alt.Chart(action_counts).mark_bar(color='#8c6239').encode(
@@ -89,21 +121,21 @@ try:
             ).properties(height=280)
             st.altair_chart(chart_action, use_container_width=True)
         else:
-            st.info("Kolom 'User_Action' tidak ditemukan.")
+            st.info("Tidak ada data pada periode ini.")
 
     # 3. Top Unrecognized Queries
     with col3:
         st.markdown("### Top Unrecognized Queries")
-        if 'User_Action' in df.columns:
+        if 'User_Action' in df.columns and not df.empty:
             unrecognized = df[df['User_Action'].str.contains("UNRESOLVED|EMOJI|STICKER|UNRECOGNIZED", case=False, na=False)]
             if not unrecognized.empty:
                 summary_unrec = unrecognized['User_Action'].value_counts().reset_index()
                 summary_unrec.columns = ['User_Action', 'Record Count']
                 st.dataframe(summary_unrec, use_container_width=True, height=280, hide_index=True)
             else:
-                st.dataframe(df.tail(3)[['User_Action']], use_container_width=True, height=280, hide_index=True)
+                st.dataframe(df.tail(3)[['User_Action']] if not df.empty else pd.DataFrame(), use_container_width=True, height=280, hide_index=True)
         else:
-            st.dataframe(df.tail(3), use_container_width=True, height=280)
+            st.dataframe(pd.DataFrame(), use_container_width=True, height=280)
 
     st.markdown("---")
 
@@ -114,7 +146,7 @@ try:
     # 1. Avg. Response Time by User Action
     with b_col1:
         st.markdown("##### Avg. Response Time by User Action")
-        if 'User_Action' in df.columns and 'Response_Time_MS' in df.columns:
+        if 'User_Action' in df.columns and 'Response_Time_MS' in df.columns and not df.empty:
             avg_resp = df.groupby('User_Action')['Response_Time_MS'].mean().reset_index()
             avg_resp = avg_resp.sort_values(by='Response_Time_MS', ascending=False).head(10)
             
@@ -124,12 +156,12 @@ try:
             ).properties(height=300)
             st.altair_chart(chart_resp, use_container_width=True)
         else:
-            st.info("Kolom Response_Time_MS tidak ditemukan.")
+            st.info("Data tidak tersedia.")
 
     # 2. FE vs BE Time (BE di bawah, FE di atas) dengan pembersihan Query_Menu
     with b_col2:
         st.markdown("##### FE vs BE Time (by Query Menu)")
-        if {'Query_Menu', 'User_Action', 'Response_Time_MS'}.issubset(df.columns):
+        if {'Query_Menu', 'User_Action', 'Response_Time_MS'}.issubset(df.columns) and not df.empty:
             filtered_fe_be = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])].copy()
             
             if not filtered_fe_be.empty:
@@ -159,21 +191,20 @@ try:
                 ).properties(height=300)
                 st.altair_chart(chart_fe_be, use_container_width=True)
             else:
-                st.info("Data MINAPP_RENDER_MENU / MINAPP_GET_LIST_MENU kosong.")
+                st.info("Data MINAPP kosong pada periode ini.")
         else:
-            st.info("Kolom pendukung FE & BE belum lengkap.")
+            st.info("Kolom pendukung belum lengkap.")
 
-    # 3. Last Execution Card (Murni ambil dari Response_Time_MS berdasarkan pasangan aksi terakhir)
+    # 3. Last Execution Card (Berdasarkan rentang tanggal yang terfilter)
     with b_col3:
         st.markdown("##### Last Execution")
         
-        minapp_df = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])]
+        minapp_df = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])] if not df.empty else pd.DataFrame()
         
         if not minapp_df.empty:
-            # Ambil timestamp maksimum dari baris RENDER_MENU terakhir sebagai acuan waktu eksekusi akhir
             render_df = minapp_df[minapp_df['User_Action'].str.upper() == 'MINAPP_RENDER_MENU']
             if not render_df.empty:
-                latest_render = render_df.loc[render_df['Timestamp'].idxmax()]
+                latest_render = render_df.loc[render_df['Parsed_Date'].idxmax()] if 'Parsed_Date' in render_df.columns else render_df.iloc[-1]
                 max_time = latest_render.get('Timestamp', '-')
                 q_menu = latest_render.get('Query_Menu', '-')
                 fe_time = latest_render.get('Response_Time_MS', 0)
@@ -182,10 +213,9 @@ try:
                 q_menu = "-"
                 fe_time = 0
 
-            # Cari baris GET_LIST_MENU (BE) terdekat sebelum atau pada timestamp yang sama dengan Query Menu tersebut
             be_df = minapp_df[(minapp_df['User_Action'].str.upper() == 'MINAPP_GET_LIST_MENU') & (minapp_df['Query_Menu'] == q_menu)]
             if not be_df.empty:
-                latest_be = be_df.iloc[-1] # Ambil baris GET_LIST_MENU terakhir untuk query menu tersebut
+                latest_be = be_df.iloc[-1]
                 be_time = latest_be.get('Response_Time_MS', 0)
             else:
                 be_time = 0

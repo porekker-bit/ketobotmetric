@@ -26,7 +26,7 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNOkulrtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
+SHEET_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vSxudsJuAdIH9LyEL-hYQK4CNoKu1rtUaYUMMSdAxaoURF4aVBBlaMHsA4bJRffBTl9c677YgkTDu-s/pub?gid=1057472349&single=true&output=csv"
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -58,7 +58,7 @@ try:
 
     st.markdown("---")
 
-    # --- BARIS 1: 3 KOLOM UTAMA SEBELUMNYA ---
+    # --- BARIS 1: 3 KOLOM UTAMA ---
     col1, col2, col3 = st.columns(3)
 
     # 1. Distribusi Jenis Input User
@@ -105,7 +105,7 @@ try:
 
     st.markdown("---")
 
-    # --- BARIS KEDUA (TAMBAHAN SESUAI REFERENSI BARU) ---
+    # --- BARIS KEDUA: ANALISIS LANJUTAN ---
     st.markdown("### Analisis Performa & Eksekusi Lanjutan")
     b_col1, b_col2, b_col3 = st.columns([1.5, 1.5, 1])
 
@@ -124,33 +124,39 @@ try:
         else:
             st.info("Kolom waktu respons tidak lengkap.")
 
-    # 2. Perbandingan FE vs BE Time (Simulasi/Kolom terkait)
+    # 2. FE Time (MINAPP_RENDER_MENU) vs BE Time (MINAPP_GET_LIST_MENU) by Query_Menu
     with b_col2:
-        st.markdown("##### FE Time vs BE Time")
-        # Mengecek apakah ada kolom latensi FE/BE, jika tidak pakai AI_Latency / Response_Time sebagai simulasi
-        if 'AI_Latency_MS' in df.columns and 'Response_Time_MS' in df.columns:
-            df['FE_Time'] = df['Response_Time_MS'] - df['AI_Latency_MS']
-            df['BE_Time'] = df['AI_Latency_MS']
+        st.markdown("##### FE vs BE Time (by Query Menu)")
+        if {'Query_Menu', 'User_Action', 'AI_Latency_MS'}.issubset(df.columns):
+            # Filter baris yang sesuai dengan User_Action yang diminta
+            filtered_fe_be = df[df['User_Action'].isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])].copy()
             
-            lat_summary = df.tail(10)[['FE_Time', 'BE_Time']].reset_index()
-            lat_melted = lat_summary.melt(id_vars=['index'], value_vars=['FE_Time', 'BE_Time'], var_name='Type', value_name='Time')
-            
-            chart_lat = alt.Chart(lat_melted).mark_bar().encode(
-                x=alt.X('Time:Q', title='ms'),
-                y=alt.Y('index:O', title='Record'),
-                color=alt.Color('Type:N', scale=alt.Scale(domain=['FE_Time', 'BE_Time'], range=['#3b82f6', '#22c55e']))
-            ).properties(height=300)
-            st.altair_chart(chart_lat, use_container_width=True)
+            if not filtered_fe_be.empty:
+                # Petakan label type
+                filtered_fe_be['Type'] = filtered_fe_be['User_Action'].map({
+                    'MINAPP_RENDER_MENU': 'FE_Time',
+                    'MINAPP_GET_LIST_MENU': 'BE_Time'
+                })
+                
+                # Ambil kolom yang dibutuhkan dan group berdasarkan Query_Menu & Type
+                fe_be_grouped = filtered_fe_be.groupby(['Query_Menu', 'Type'])['AI_Latency_MS'].mean().reset_index()
+                fe_be_grouped.rename(columns={'AI_Latency_MS': 'Time_MS'}, inplace=True)
+                
+                chart_fe_be = alt.Chart(fe_be_grouped).mark_bar().encode(
+                    x=alt.X('Time_MS:Q', title='Time (ms)'),
+                    y=alt.Y('Query_Menu:N', sort='-x', title='Query Menu'),
+                    color=alt.Color('Type:N', scale=alt.Scale(domain=['FE_Time', 'BE_Time'], range=['#3b82f6', '#22c55e']))
+                ).properties(height=300)
+                st.altair_chart(chart_fe_be, use_container_width=True)
+            else:
+                st.info("Belum ada data untuk MINAPP_RENDER_MENU / MINAPP_GET_LIST_MENU.")
         else:
-            st.info("Data FE/BE Latency belum tersedia.")
+            st.info("Kolom pendukung FE/BE belum lengkap di Sheet.")
 
-    # 3. Last Execution Card (Kotak Kuning Ringkas)
+    # 3. Last Execution Card
     with b_col3:
         st.markdown("##### Last Execution")
         latest = df.tail(1).iloc[0]
-        
-        # Ambil nilai aman dari row terakhir
-        lat_menu = latest.get('Query_Menu', '-')
         lat_resp = latest.get('Response_Time_MS', 0)
         lat_ai = latest.get('AI_Latency_MS', 0)
         

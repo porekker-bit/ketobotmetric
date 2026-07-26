@@ -147,13 +147,6 @@ try:
                     'MINAPP_GET_LIST_MENU': 'BE_Time'
                 })
                 
-                # Perbaikan pembacaan nilai Response_Time_MS jika di baris BE nilainya 0, ambil dari kolom angka aktif di baris tersebut
-                for idx, row in filtered_fe_be.iterrows():
-                    if row['Response_Time_MS'] == 0:
-                        row_nums = [row[c] for c in filtered_fe_be.select_dtypes(include=['number']).columns if row[c] > 0 and c != 'Response_Time_MS']
-                        if row_nums:
-                            filtered_fe_be.loc[idx, 'Response_Time_MS'] = max(row_nums)
-
                 fe_be_grouped = filtered_fe_be.groupby(['Clean_Query_Menu', 'Type'])['Response_Time_MS'].mean().reset_index()
                 fe_be_grouped.rename(columns={'Response_Time_MS': 'Time_MS'}, inplace=True)
                 
@@ -170,35 +163,35 @@ try:
         else:
             st.info("Kolom pendukung FE & BE belum lengkap.")
 
-    # 3. Last Execution Card (FE, BE, dan Total = BE + FE)
+    # 3. Last Execution Card (Murni ambil dari Response_Time_MS berdasarkan pasangan aksi terakhir)
     with b_col3:
         st.markdown("##### Last Execution")
         
         minapp_df = df[df['User_Action'].str.upper().isin(['MINAPP_RENDER_MENU', 'MINAPP_GET_LIST_MENU'])]
         
         if not minapp_df.empty:
-            max_time = minapp_df['Timestamp'].max()
-            latest_pair = minapp_df[minapp_df['Timestamp'] == max_time]
-            
-            fe_row = latest_pair[latest_pair['User_Action'].str.upper() == 'MINAPP_RENDER_MENU']
-            be_row = latest_pair[latest_pair['User_Action'].str.upper() == 'MINAPP_GET_LIST_MENU']
-            
-            def extract_val(row_sub):
-                if row_sub.empty:
-                    return 0
-                r = row_sub.iloc[0]
-                val = r.get('Response_Time_MS', 0)
-                if val == 0:
-                    nums = [r[c] for c in df.select_dtypes(include=['number']).columns if r[c] > 0]
-                    if nums:
-                        return max(nums)
-                return val
+            # Ambil timestamp maksimum dari baris RENDER_MENU terakhir sebagai acuan waktu eksekusi akhir
+            render_df = minapp_df[minapp_df['User_Action'].str.upper() == 'MINAPP_RENDER_MENU']
+            if not render_df.empty:
+                latest_render = render_df.loc[render_df['Timestamp'].idxmax()]
+                max_time = latest_render.get('Timestamp', '-')
+                q_menu = latest_render.get('Query_Menu', '-')
+                fe_time = latest_render.get('Response_Time_MS', 0)
+            else:
+                max_time = "-"
+                q_menu = "-"
+                fe_time = 0
 
-            fe_time = extract_val(fe_row)
-            be_time = extract_val(be_row)
+            # Cari baris GET_LIST_MENU (BE) terdekat sebelum atau pada timestamp yang sama dengan Query Menu tersebut
+            be_df = minapp_df[(minapp_df['User_Action'].str.upper() == 'MINAPP_GET_LIST_MENU') & (minapp_df['Query_Menu'] == q_menu)]
+            if not be_df.empty:
+                latest_be = be_df.iloc[-1] # Ambil baris GET_LIST_MENU terakhir untuk query menu tersebut
+                be_time = latest_be.get('Response_Time_MS', 0)
+            else:
+                be_time = 0
+
             total_time = be_time + fe_time
             
-            q_menu = latest_pair['Query_Menu'].values[0] if not latest_pair.empty else "-"
             match_menu = re.search(r'(\d+)', str(q_menu))
             display_menu = f"{match_menu.group(1)} Menu" if match_menu else str(q_menu)
         else:
